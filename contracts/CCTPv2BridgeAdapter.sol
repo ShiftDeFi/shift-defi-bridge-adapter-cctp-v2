@@ -21,14 +21,22 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
     uint256 private constant MIN_FINALITY_THRESHOLD = 1000;
     uint256 private constant MAX_FINALITY_THRESHOLD = 2000;
 
-    // Transient storage slot for amount claimed during bridge claim
-    // uint256(keccak256("CCTP_AMOUNT_CLAIMED"))
+    /// @notice Transient storage slot for amount claimed during bridge claim
+    /// @dev Calculated as uint256(keccak256("CCTP_AMOUNT_CLAIMED"))
     uint256 private constant TRANSIENT_STORAGE_SLOT_AMOUNT_CLAIMED =
         91252728200670152002459531059255922075468269428108162438568888169768460224758;
 
     mapping(uint256 => Domain) private _domainsByChainId;
     mapping(uint32 => uint256) private _chainIdByDomainId;
 
+    /**
+     * @notice Initializes the CCTPv2BridgeAdapter contract
+     * @dev Sets up the token messenger, message transmitter, and USDC addresses
+     * @param _defaultAdmin The default admin address for access control
+     * @param _governance The governance address for access control
+     * @param _tokenMessengerV2 The address of the TokenMessengerV2 contract
+     * @param _usdc The address of the USDC token contract
+     */
     function initialize(
         address _defaultAdmin,
         address _governance,
@@ -43,6 +51,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         __BridgeAdapter_init(_defaultAdmin, _governance);
     }
 
+    /// @inheritdoc ICCTPv2BridgeAdapter
     function whitelistDomain(uint256 chainId, uint32 domainId) external onlyRole(GOVERNANCE_ROLE) {
         require(chainId > 0, IncorrectChainId(chainId));
         require(domainId > 0, IncorrectDomainId(domainId));
@@ -55,6 +64,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         emit DomainWhitelisted(chainId, domainId);
     }
 
+    /// @inheritdoc ICCTPv2BridgeAdapter
     function blacklistDomain(uint256 chainId, uint32 domainId) external onlyRole(GOVERNANCE_ROLE) {
         require(chainId > 0, IncorrectChainId(chainId));
         require(domainId > 0, IncorrectDomainId(domainId));
@@ -65,6 +75,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         emit DomainBlacklisted(chainId, domainId);
     }
 
+    /// @inheritdoc ICCTPv2BridgeAdapter
     function encodeCCTPV2Payload(
         uint256 maxFee,
         uint32 bridgeMinFinalityThreshold,
@@ -73,6 +84,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         return abi.encode(maxFee, bridgeMinFinalityThreshold, messageMinFinalityThreshold);
     }
 
+    /// @inheritdoc ICCTPv2BridgeAdapter
     function decodeCCTPV2Payload(bytes memory payload) public pure returns (CCTPV2Payload memory) {
         return abi.decode(payload, (CCTPV2Payload));
     }
@@ -132,18 +144,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         );
     }
 
-    //  Structure of CCTPv2 message:
-    //  * version                      4          uint32     0
-    //  * sourceDomain                 4          uint32     4
-    //  * destinationDomain            4          uint32     8
-    //  * nonce                        32         bytes32    12
-    //  * sender                       32         bytes32    44
-    //  * recipient                    32         bytes32    76
-    //  * destinationCaller            32         bytes32    108
-    //  * minFinalityThreshold         4          uint32     140
-    //  * finalityThresholdExecuted    4          uint32     144
-    //  * messageBody                  dynamic    bytes      148
-
+    /// @inheritdoc ICCTPv2BridgeAdapter
     function claimCCTPBridge(
         bytes calldata bridgeMessage,
         bytes calldata bridgeAttestation,
@@ -174,6 +175,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         }
     }
 
+    /// @inheritdoc ICCTPv2BridgeAdapter
     function handleReceiveFinalizedMessage(
         uint32 sourceDomain,
         bytes32 sender,
