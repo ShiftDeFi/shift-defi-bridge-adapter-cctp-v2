@@ -17,5 +17,8 @@
   },
   "scripts": {
     "prepare": "husky"
+  },
+  "dependencies": {
+    "@shift-defi/core": "^0.2.0"
   }
 }
