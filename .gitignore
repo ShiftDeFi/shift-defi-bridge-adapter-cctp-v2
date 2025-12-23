@@ -1,0 +1,21 @@
+# Compiler files
+cache/
+out/
+lib/
+
+# Ignores development broadcast logs
+/broadcast/
+
+# Docs
+docs/
+
+# Dotenv file
+**/*.env
+
+# OS files
+**/*.DS_Store
+
+.vscode/
+node_modules/
+package-lock.json
+foundry.lock
