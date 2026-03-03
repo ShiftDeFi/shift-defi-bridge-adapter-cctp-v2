@@ -232,6 +232,54 @@ contract CCTPv2BridgeAdapterTest is Test {
         );
     }
 
+    function test_Claim_HandleUnfinalizedMessage() public {
+        uint256 amount = _randomBridgeAmount();
+        uint256 maxFee = _randomMaxFee();
+        uint256 minTokenAmount = amount - maxFee - 1;
+        uint32 unfinalizedThreshold = uint32(
+            vm.randomUint(MIN_FINALITY_THRESHOLD, MAX_FINALITY_THRESHOLD - 1)
+        );
+
+        vm.selectFork(l1ForkId);
+        deal(l1Fork.usdc, roles.bridger, amount);
+
+        vm.recordLogs();
+        vm.startPrank(roles.bridger);
+        IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
+        l1Peer.bridge(
+            IBridgeAdapter.BridgeInstruction({
+                token: l1Fork.usdc,
+                amount: amount,
+                chainTo: l2Fork.chainId,
+                minTokenAmount: minTokenAmount,
+                payload: abi.encode(maxFee, unfinalizedThreshold, unfinalizedThreshold)
+            }),
+            receiver
+        );
+        vm.stopPrank();
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes memory bridgeMessage = abi.decode(entries[6].data, (bytes));
+        bytes memory messageMessage = abi.decode(entries[8].data, (bytes));
+
+        messageMessage = _randomizeNonce(messageMessage);
+        bridgeMessage = _randomizeNonce(bridgeMessage);
+        messageMessage = _insertFinalityThreshold(messageMessage, unfinalizedThreshold);
+        bridgeMessage = _insertFinalityThreshold(bridgeMessage, unfinalizedThreshold);
+
+        bytes memory bridgeAttestationPacked = _packAttestations(l2Attesters, keccak256(bridgeMessage));
+        bytes memory messageAttestationPacked = _packAttestations(l2Attesters, keccak256(messageMessage));
+
+        vm.selectFork(l2ForkId);
+        l2Peer.claimCCTPBridge(bridgeMessage, bridgeAttestationPacked, messageMessage, messageAttestationPacked);
+
+        assertEq(
+            IERC20(l2Fork.usdc).balanceOf(address(l2Peer)),
+            amount,
+            "Adapter should hold claimed USDC amount when message is unfinalized"
+        );
+    }
+
     function test_WhitelistDomain_Success() public {
         vm.selectFork(l1ForkId);
         uint256 newChainId = 99_999;

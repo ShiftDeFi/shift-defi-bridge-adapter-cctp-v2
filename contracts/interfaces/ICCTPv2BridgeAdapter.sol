@@ -70,6 +70,22 @@ interface ICCTPv2BridgeAdapter {
     ) external returns (bool);
 
     /**
+     * @notice Handles an unfinalized message received from the message transmitter
+     * @dev This function is called by the message transmitter when a message is received but not yet finalized on the destination chain
+     * @param sourceDomain The source domain ID where the message originated
+     * @param sender The sender address encoded as bytes32
+     * @param minFinalityThreshold The minimum finality threshold that was executed (unused parameter)
+     * @param messageBody The message body containing the receiver address
+     * @return True if the message was successfully processed
+     */
+    function handleReceiveUnfinalizedMessage(
+        uint32 sourceDomain,
+        bytes32 sender,
+        uint32 minFinalityThreshold,
+        bytes calldata messageBody
+    ) external returns (bool);
+
+    /**
      * @notice Whitelists a domain for bridging operations
      * @dev Only callable by addresses with GOVERNANCE_ROLE
      * @param chainId The chain ID to whitelist

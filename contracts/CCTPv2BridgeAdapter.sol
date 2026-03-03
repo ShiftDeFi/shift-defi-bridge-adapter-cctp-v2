@@ -183,6 +183,32 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         bytes calldata messageBody
     ) external override returns (bool) {
         require(msg.sender == messageTransmitter, NotMessageTransmitter(msg.sender, messageTransmitter));
+        return _handleReceiveMessage(sourceDomain, sender, messageBody);
+    }
+
+    /// @inheritdoc ICCTPv2BridgeAdapter
+    function handleReceiveUnfinalizedMessage(
+        uint32 sourceDomain,
+        bytes32 sender,
+        uint32,
+        bytes calldata messageBody
+    ) external returns (bool) {
+        require(msg.sender == messageTransmitter, NotMessageTransmitter(msg.sender, messageTransmitter));
+        return _handleReceiveMessage(sourceDomain, sender, messageBody);
+    }
+
+    /**
+     * @notice Validates CCTP message and finalizes bridge using amount from transient storage
+     * @param sourceDomain Source domain ID
+     * @param sender Sender as bytes32
+     * @param messageBody ABI-encoded receiver address
+     * @return true on success
+     */
+    function _handleReceiveMessage(
+        uint32 sourceDomain,
+        bytes32 sender,
+        bytes calldata messageBody
+    ) internal returns (bool) {
         uint256 chainFromId = _chainIdByDomainId[sourceDomain];
 
         require(_domainsByChainId[chainFromId].isWhitelisted, NotWhitelistedDomain(sourceDomain));
