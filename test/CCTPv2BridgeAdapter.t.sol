@@ -91,6 +91,7 @@ contract CCTPv2BridgeAdapterTest is Test {
     uint256 public constant MIN_FINALITY_THRESHOLD = 1000;
     uint256 public constant MAX_FINALITY_THRESHOLD = 2000;
     uint256 public constant SLIPPAGE_CAP_PCT = 1000;
+    uint256 public constant CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH = 396;
 
     uint256[] public l1Attesters;
     uint256[] public l2Attesters;
@@ -155,6 +156,23 @@ contract CCTPv2BridgeAdapterTest is Test {
         return uint32(vm.randomUint(MIN_FINALITY_THRESHOLD, MAX_FINALITY_THRESHOLD));
     }
 
+    function _findBridgeMessageInLogs(Vm.Log[] memory entries) internal view returns (bytes memory) {
+        for (uint256 i = 0; i < entries.length; i++) {
+            bytes memory logData = entries[i].data;
+            if (logData.length < 64) continue;
+            try this.decodeLogData(logData) returns (bytes memory decoded) {
+                if (decoded.length >= 356 && decoded.length <= 400) {
+                    return decoded;
+                }
+            } catch {}
+        }
+        revert("Bridge message not found in logs");
+    }
+
+    function decodeLogData(bytes memory data) external pure returns (bytes memory) {
+        return abi.decode(data, (bytes));
+    }
+
     function test_Bridge() public {
         uint256 amount = _randomBridgeAmount();
         uint256 maxFee = _randomMaxFee();
@@ -174,7 +192,7 @@ contract CCTPv2BridgeAdapterTest is Test {
                 amount: amount,
                 chainTo: l2Fork.chainId,
                 minTokenAmount: minTokenAmount,
-                payload: abi.encode(maxFee, finality, finality)
+                payload: l1Peer.encodeCCTPV2Payload(maxFee, finality)
             }),
             receiver
         );
@@ -184,51 +202,6 @@ contract CCTPv2BridgeAdapterTest is Test {
             IERC20(l1Fork.usdc).balanceOf(roles.bridger),
             balanceBefore - amount,
             "Bridger balance should decrease by bridged amount"
-        );
-    }
-
-    function test_Claim() public {
-        uint256 amount = _randomBridgeAmount();
-        uint256 maxFee = _randomMaxFee();
-        uint256 minTokenAmount = amount - maxFee - 1;
-
-        vm.selectFork(l1ForkId);
-        deal(l1Fork.usdc, roles.bridger, amount);
-
-        vm.recordLogs();
-        vm.startPrank(roles.bridger);
-        IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
-        l1Peer.bridge(
-            IBridgeAdapter.BridgeInstruction({
-                token: l1Fork.usdc,
-                amount: amount,
-                chainTo: l2Fork.chainId,
-                minTokenAmount: minTokenAmount,
-                payload: abi.encode(maxFee, uint32(MAX_FINALITY_THRESHOLD), uint32(MAX_FINALITY_THRESHOLD))
-            }),
-            receiver
-        );
-        vm.stopPrank();
-
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        bytes memory bridgeMessage = abi.decode(entries[6].data, (bytes));
-        bytes memory messageMessage = abi.decode(entries[8].data, (bytes));
-
-        messageMessage = _randomizeNonce(messageMessage);
-        bridgeMessage = _randomizeNonce(bridgeMessage);
-        messageMessage = _insertFinalityThreshold(messageMessage, uint32(MAX_FINALITY_THRESHOLD));
-        bridgeMessage = _insertFinalityThreshold(bridgeMessage, uint32(MAX_FINALITY_THRESHOLD));
-
-        bytes memory bridgeAttestationPacked = _packAttestations(l2Attesters, keccak256(bridgeMessage));
-        bytes memory messageAttestationPacked = _packAttestations(l2Attesters, keccak256(messageMessage));
-
-        vm.selectFork(l2ForkId);
-        l2Peer.claimCCTPBridge(bridgeMessage, bridgeAttestationPacked, messageMessage, messageAttestationPacked);
-
-        assertEq(
-            IERC20(l2Fork.usdc).balanceOf(address(l2Peer)),
-            amount,
-            "Adapter should hold claimed USDC amount"
         );
     }
 
@@ -252,26 +225,22 @@ contract CCTPv2BridgeAdapterTest is Test {
                 amount: amount,
                 chainTo: l2Fork.chainId,
                 minTokenAmount: minTokenAmount,
-                payload: abi.encode(maxFee, unfinalizedThreshold, unfinalizedThreshold)
+                payload: l1Peer.encodeCCTPV2Payload(maxFee, unfinalizedThreshold)
             }),
             receiver
         );
         vm.stopPrank();
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        bytes memory bridgeMessage = abi.decode(entries[6].data, (bytes));
-        bytes memory messageMessage = abi.decode(entries[8].data, (bytes));
+        bytes memory bridgeMessage = _findBridgeMessageInLogs(entries);
 
-        messageMessage = _randomizeNonce(messageMessage);
         bridgeMessage = _randomizeNonce(bridgeMessage);
-        messageMessage = _insertFinalityThreshold(messageMessage, unfinalizedThreshold);
         bridgeMessage = _insertFinalityThreshold(bridgeMessage, unfinalizedThreshold);
 
         bytes memory bridgeAttestationPacked = _packAttestations(l2Attesters, keccak256(bridgeMessage));
-        bytes memory messageAttestationPacked = _packAttestations(l2Attesters, keccak256(messageMessage));
 
         vm.selectFork(l2ForkId);
-        l2Peer.claimCCTPBridge(bridgeMessage, bridgeAttestationPacked, messageMessage, messageAttestationPacked);
+        l2Peer.claimCCTPBridge(bridgeMessage, bridgeAttestationPacked);
 
         assertEq(
             IERC20(l2Fork.usdc).balanceOf(address(l2Peer)),
@@ -327,7 +296,7 @@ contract CCTPv2BridgeAdapterTest is Test {
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
         deal(l1Fork.usdc, roles.bridger, amount);
 
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, finality, finality);
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, finality);
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
@@ -382,7 +351,7 @@ contract CCTPv2BridgeAdapterTest is Test {
         l1Peer.setBridgePath(address(otherToken), l2Fork.chainId, l2Fork.usdc);
         vm.stopPrank();
 
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 1500, 1500);
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 1500);
 
         vm.startPrank(roles.bridger);
         otherToken.approve(address(l1Peer), amount);
@@ -409,7 +378,7 @@ contract CCTPv2BridgeAdapterTest is Test {
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
         deal(l1Fork.usdc, roles.bridger, amount);
 
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 1500, 1500);
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 1500);
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
@@ -435,7 +404,7 @@ contract CCTPv2BridgeAdapterTest is Test {
         uint256 maxFee = _randomMaxFee();
 
         deal(l1Fork.usdc, roles.bridger, amount);
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 999, 1500);
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 999);
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
@@ -455,18 +424,18 @@ contract CCTPv2BridgeAdapterTest is Test {
         vm.stopPrank();
     }
 
-    function test_Bridge_RevertIf_MaxFinalityThresholdOutOfRange() public {
+    function test_Bridge_RevertIf_FinalityThresholdAboveMax() public {
         vm.selectFork(l1ForkId);
         uint256 amount = _randomBridgeAmount();
         uint256 maxFee = _randomMaxFee();
 
         deal(l1Fork.usdc, roles.bridger, amount);
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 1500, 2001);
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, 2001);
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
         vm.expectRevert(
-            abi.encodeWithSelector(ICCTPv2BridgeAdapter.MaxFinalityThresholdNotInRange.selector, uint32(2001))
+            abi.encodeWithSelector(ICCTPv2BridgeAdapter.MinFinalityThresholdNotInRange.selector, uint32(2001))
         );
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
@@ -487,11 +456,7 @@ contract CCTPv2BridgeAdapterTest is Test {
         uint256 maxFee = _randomMaxFee();
 
         deal(l1Fork.usdc, roles.bridger, amount);
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(
-            maxFee,
-            uint32(MIN_FINALITY_THRESHOLD),
-            uint32(MIN_FINALITY_THRESHOLD)
-        );
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, uint32(MIN_FINALITY_THRESHOLD));
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
@@ -520,11 +485,7 @@ contract CCTPv2BridgeAdapterTest is Test {
         uint256 maxFee = _randomMaxFee();
 
         deal(l1Fork.usdc, roles.bridger, amount);
-        bytes memory payload = l1Peer.encodeCCTPV2Payload(
-            maxFee,
-            uint32(MAX_FINALITY_THRESHOLD),
-            uint32(MAX_FINALITY_THRESHOLD)
-        );
+        bytes memory payload = l1Peer.encodeCCTPV2Payload(maxFee, uint32(MAX_FINALITY_THRESHOLD));
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
@@ -547,86 +508,40 @@ contract CCTPv2BridgeAdapterTest is Test {
         );
     }
 
-    function test_ClaimCCTPBridge_RevertIf_InvalidAttestation() public {
-        vm.selectFork(l2ForkId);
-        bytes memory fakeMessage = abi.encodePacked(bytes32(0), bytes32(0));
-        bytes memory wrongAttestation = abi.encodePacked(bytes32(0));
-
-        vm.expectRevert();
-        l2Peer.claimCCTPBridge(fakeMessage, wrongAttestation, fakeMessage, wrongAttestation);
-    }
-
-    function test_HandleReceiveFinalizedMessage_RevertIf_NotMessageTransmitter() public {
-        vm.selectFork(l2ForkId);
-        address notTransmitter = makeAddr("random");
-        address expectedTransmitter = l2Peer.messageTransmitter();
-
-        vm.prank(notTransmitter);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ICCTPv2BridgeAdapter.NotMessageTransmitter.selector,
-                notTransmitter,
-                expectedTransmitter
-            )
-        );
-        l2Peer.handleReceiveFinalizedMessage(
-            l1Fork.domainId,
-            bytes32(uint256(uint160(address(l1Peer)))),
-            0,
-            abi.encode(receiver)
-        );
-    }
-
-    function test_HandleReceiveFinalizedMessage_RevertIf_NotWhitelistedDomain() public {
-        vm.selectFork(l2ForkId);
-        uint32 unknownDomain = 99;
-
-        vm.prank(l2Peer.messageTransmitter());
-        vm.expectRevert(
-            abi.encodeWithSelector(ICCTPv2BridgeAdapter.NotWhitelistedDomain.selector, unknownDomain)
-        );
-        l2Peer.handleReceiveFinalizedMessage(
-            unknownDomain,
-            bytes32(uint256(uint160(address(l1Peer)))),
-            0,
-            abi.encode(receiver)
-        );
-    }
-
-    function test_HandleReceiveFinalizedMessage_RevertIf_NotPeer() public {
-        vm.selectFork(l2ForkId);
-        address wrongPeer = makeAddr("wrongPeer");
-
-        vm.prank(l2Peer.messageTransmitter());
-        vm.expectRevert(
-            abi.encodeWithSelector(IBridgeAdapter.NotPeer.selector, wrongPeer, address(l1Peer))
-        );
-        l2Peer.handleReceiveFinalizedMessage(
-            l1Fork.domainId,
-            bytes32(uint256(uint160(wrongPeer))),
-            0,
-            abi.encode(receiver)
-        );
-    }
-
     function test_EncodeDecodeCCTPV2Payload_Roundtrip() public {
         vm.selectFork(l1ForkId);
         uint256 maxFee = _randomMaxFee();
         uint32 bridgeMin = _randomFinalityThreshold();
-        uint32 messageMin = _randomFinalityThreshold();
 
-        bytes memory encoded = l1Peer.encodeCCTPV2Payload(maxFee, bridgeMin, messageMin);
+        bytes memory encoded = l1Peer.encodeCCTPV2Payload(maxFee, bridgeMin);
         ICCTPv2BridgeAdapter.CCTPV2Payload memory decoded = l1Peer.decodeCCTPV2Payload(encoded);
 
         assertEq(decoded.maxFee, maxFee, "maxFee should match");
         assertEq(decoded.bridgeMinFinalityThreshold, bridgeMin, "bridgeMinFinalityThreshold should match");
-        assertEq(decoded.messageMinFinalityThreshold, messageMin, "messageMinFinalityThreshold should match");
     }
 
     function test_DecodeCCTPV2Payload_RevertIf_InvalidPayload() public {
         vm.selectFork(l1ForkId);
         vm.expectRevert();
         l1Peer.decodeCCTPV2Payload(hex"01");
+    }
+
+    function test_ClaimCCTPBridge_RevertIf_InvalidAttestation() public {
+        vm.selectFork(l2ForkId);
+        bytes memory fakeMessage = new bytes(CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH);
+        bytes memory wrongAttestation = abi.encodePacked(bytes32(0));
+
+        vm.expectRevert();
+        l2Peer.claimCCTPBridge(fakeMessage, wrongAttestation);
+    }
+
+    function test_ClaimCCTPBridge_RevertIf_InvalidBridgeMessageLength() public {
+        vm.selectFork(l2ForkId);
+        bytes memory shortMessage = new bytes(100);
+        bytes memory attestation = _packAttestations(l2Attesters, keccak256(shortMessage));
+
+        vm.expectRevert();
+        l2Peer.claimCCTPBridge(shortMessage, attestation);
     }
 
     function _setupAttesters(uint256 forkId, Fork memory fork) internal returns (uint256[] memory) {

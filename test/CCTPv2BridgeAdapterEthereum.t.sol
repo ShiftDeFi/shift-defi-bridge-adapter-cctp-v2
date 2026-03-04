@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.28;
+
 import {CCTPv2BridgeAdapterTest} from "./CCTPv2BridgeAdapter.t.sol";
 
 contract CCTPv2BridgeAdapterEthereumTest is CCTPv2BridgeAdapterTest {

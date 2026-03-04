@@ -16,7 +16,6 @@ interface ICCTPv2BridgeAdapter {
     struct CCTPV2Payload {
         uint256 maxFee;
         uint32 bridgeMinFinalityThreshold;
-        uint32 messageMinFinalityThreshold;
     }
 
     event DomainWhitelisted(uint256 indexed chainId, uint32 indexed domainId);
@@ -34,6 +33,7 @@ interface ICCTPv2BridgeAdapter {
     error DomainNotWhitelisted(uint256 chainId, uint32 domainId);
     error NotUsdcInBridgeInstruction(address token);
     error FailedMessageReceive();
+    error InvalidBridgeMessageLength(uint256 length);
 
     /**
      * @notice Returns the address of the TokenMessengerV2 contract
@@ -52,38 +52,6 @@ interface ICCTPv2BridgeAdapter {
      * @return The USDC token contract address
      */
     function usdc() external view returns (address);
-
-    /**
-     * @notice Handles a finalized message received from the message transmitter
-     * @dev This function is called by the message transmitter when a message is finalized on the destination chain
-     * @param sourceDomain The source domain ID where the message originated
-     * @param sender The sender address encoded as bytes32
-     * @param minFinalityThreshold The minimum finality threshold that was executed (unused parameter)
-     * @param messageBody The message body containing the receiver address
-     * @return True if the message was successfully processed
-     */
-    function handleReceiveFinalizedMessage(
-        uint32 sourceDomain,
-        bytes32 sender,
-        uint32 minFinalityThreshold,
-        bytes calldata messageBody
-    ) external returns (bool);
-
-    /**
-     * @notice Handles an unfinalized message received from the message transmitter
-     * @dev This function is called by the message transmitter when a message is received but not yet finalized on the destination chain
-     * @param sourceDomain The source domain ID where the message originated
-     * @param sender The sender address encoded as bytes32
-     * @param minFinalityThreshold The minimum finality threshold that was executed (unused parameter)
-     * @param messageBody The message body containing the receiver address
-     * @return True if the message was successfully processed
-     */
-    function handleReceiveUnfinalizedMessage(
-        uint32 sourceDomain,
-        bytes32 sender,
-        uint32 minFinalityThreshold,
-        bytes calldata messageBody
-    ) external returns (bool);
 
     /**
      * @notice Whitelists a domain for bridging operations
@@ -106,13 +74,11 @@ interface ICCTPv2BridgeAdapter {
      * @dev Helper function to encode bridge configuration parameters
      * @param maxFee Maximum fee allowed for the bridge transaction
      * @param bridgeMinFinalityThreshold Minimum finality threshold for the bridge message (must be between 1000-2000)
-     * @param messageMinFinalityThreshold Minimum finality threshold for the receiver message (must be between 1000-2000)
      * @return The encoded payload bytes
      */
     function encodeCCTPV2Payload(
         uint256 maxFee,
-        uint32 bridgeMinFinalityThreshold,
-        uint32 messageMinFinalityThreshold
+        uint32 bridgeMinFinalityThreshold
     ) external pure returns (bytes memory);
 
     /**
@@ -124,18 +90,20 @@ interface ICCTPv2BridgeAdapter {
     function decodeCCTPV2Payload(bytes memory payload) external pure returns (CCTPV2Payload memory);
 
     /**
-     * @notice Claims bridged USDC tokens and processes the associated message
-     * @dev This function receives two messages: one for the bridge (USDC tokens) and one for the receiver information.
-     *      Uses transient storage to pass the claimed amount between message receptions.
-     * @param bridgeMessage The encoded bridge message containing token transfer information
+     * @notice Claims bridged USDC tokens using a single CCTP bridge message
+     * @dev Verifies the bridge message via MessageTransmitter and credits the receiver embedded in the message payload
+     * @param bridgeMessage The encoded bridge message containing token transfer and receiver information
      * @param bridgeAttestation The attestation for the bridge message
-     * @param messageMessage The encoded message containing receiver information
-     * @param messageAttestion The attestation for the receiver message
      */
     function claimCCTPBridge(
         bytes calldata bridgeMessage,
-        bytes calldata bridgeAttestation,
-        bytes calldata messageMessage,
-        bytes calldata messageAttestion
+        bytes calldata bridgeAttestation
     ) external;
+
+    /**
+     * @notice Returns the CCTP domain id for a given EVM chain id
+     * @param chainId The EVM chain id
+     * @return domainId The corresponding CCTP domain id
+     */
+    function getDomainId(uint256 chainId) external view returns (uint32 domainId);
 }

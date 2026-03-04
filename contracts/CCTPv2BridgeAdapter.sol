@@ -21,10 +21,9 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
     uint256 private constant MIN_FINALITY_THRESHOLD = 1000;
     uint256 private constant MAX_FINALITY_THRESHOLD = 2000;
 
-    /// @notice Transient storage slot for amount claimed during bridge claim
-    /// @dev Calculated as uint256(keccak256("CCTP_AMOUNT_CLAIMED"))
-    uint256 private constant TRANSIENT_STORAGE_SLOT_AMOUNT_CLAIMED =
-        91252728200670152002459531059255922075468269428108162438568888169768460224758;
+    /// @notice Length of the CCTP v2 bridge message with receiver payload
+    /// @dev This is the fixed length of the bridge message (356 bytes) plus the 20 byte receiver address payload
+    uint256 private constant CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH = 396;
 
     mapping(uint256 => Domain) private _domainsByChainId;
     mapping(uint32 => uint256) private _chainIdByDomainId;
@@ -78,15 +77,19 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
     /// @inheritdoc ICCTPv2BridgeAdapter
     function encodeCCTPV2Payload(
         uint256 maxFee,
-        uint32 bridgeMinFinalityThreshold,
-        uint32 messageMinFinalityThreshold
+        uint32 bridgeMinFinalityThreshold
     ) external pure returns (bytes memory) {
-        return abi.encode(maxFee, bridgeMinFinalityThreshold, messageMinFinalityThreshold);
+        return abi.encode(maxFee, bridgeMinFinalityThreshold);
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
     function decodeCCTPV2Payload(bytes memory payload) public pure returns (CCTPV2Payload memory) {
         return abi.decode(payload, (CCTPV2Payload));
+    }
+
+    /// @inheritdoc ICCTPv2BridgeAdapter
+    function getDomainId(uint256 chainId) public view returns (uint32) {
+        return _domainsByChainId[chainId].domainId;
     }
 
     function _bridge(
@@ -102,23 +105,17 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
 
         bytes32 peerBytes32 = bytes32(uint256(uint160(peer)));
         IERC20(usdcCached).safeIncreaseAllowance(tokenMessengerV2Cached, instruction.amount);
-        ITokenMessengerV2(tokenMessengerV2Cached).depositForBurn(
+        ITokenMessengerV2(tokenMessengerV2Cached).depositForBurnWithHook(
             instruction.amount,
             _domainsByChainId[instruction.chainTo].domainId,
             peerBytes32,
             usdcCached,
             peerBytes32,
             decodedPayload.maxFee,
-            decodedPayload.bridgeMinFinalityThreshold
+            decodedPayload.bridgeMinFinalityThreshold,
+            abi.encodePacked(receiver)
         );
 
-        IMessageTransmitter(messageTransmitter).sendMessage(
-            _domainsByChainId[instruction.chainTo].domainId,
-            peerBytes32,
-            peerBytes32,
-            decodedPayload.messageMinFinalityThreshold,
-            abi.encode(receiver)
-        );
         return instruction.amount;
     }
 
@@ -137,19 +134,12 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
                 decodedPayload.bridgeMinFinalityThreshold <= MAX_FINALITY_THRESHOLD,
             MinFinalityThresholdNotInRange(decodedPayload.bridgeMinFinalityThreshold)
         );
-        require(
-            decodedPayload.messageMinFinalityThreshold >= MIN_FINALITY_THRESHOLD &&
-                decodedPayload.messageMinFinalityThreshold <= MAX_FINALITY_THRESHOLD,
-            MaxFinalityThresholdNotInRange(decodedPayload.messageMinFinalityThreshold)
-        );
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
     function claimCCTPBridge(
         bytes calldata bridgeMessage,
-        bytes calldata bridgeAttestation,
-        bytes calldata messageMessage,
-        bytes calldata messageAttestion
+        bytes calldata bridgeAttestation
     ) external nonReentrant {
         address usdcCached = usdc;
         uint256 amountBeforeClaim = IERC20(usdcCached).balanceOf(address(this));
@@ -160,72 +150,26 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         uint256 amountAfterClaim = IERC20(usdcCached).balanceOf(address(this));
         uint256 amountClaimed = amountAfterClaim - amountBeforeClaim;
         require(amountClaimed > 0, Errors.ZeroAmount());
-        uint256 slot = TRANSIENT_STORAGE_SLOT_AMOUNT_CLAIMED;
-        assembly {
-            tstore(slot, amountClaimed)
-        }
-        require(
-            IMessageTransmitter(messageTransmitter).receiveMessage(messageMessage, messageAttestion),
-            FailedMessageReceive()
-        );
 
-        assembly {
-            // free transient storage slot
-            tstore(slot, 0)
-        }
-    }
+        address receiver = _extractReceiverFromBridgeMessage(bridgeMessage);
 
-    /// @inheritdoc ICCTPv2BridgeAdapter
-    function handleReceiveFinalizedMessage(
-        uint32 sourceDomain,
-        bytes32 sender,
-        uint32,
-        bytes calldata messageBody
-    ) external override returns (bool) {
-        require(msg.sender == messageTransmitter, NotMessageTransmitter(msg.sender, messageTransmitter));
-        return _handleReceiveMessage(sourceDomain, sender, messageBody);
-    }
-
-    /// @inheritdoc ICCTPv2BridgeAdapter
-    function handleReceiveUnfinalizedMessage(
-        uint32 sourceDomain,
-        bytes32 sender,
-        uint32,
-        bytes calldata messageBody
-    ) external returns (bool) {
-        require(msg.sender == messageTransmitter, NotMessageTransmitter(msg.sender, messageTransmitter));
-        return _handleReceiveMessage(sourceDomain, sender, messageBody);
+        _finalizeBridge(receiver, usdcCached, amountClaimed);
     }
 
     /**
-     * @notice Validates CCTP message and finalizes bridge using amount from transient storage
-     * @param sourceDomain Source domain ID
-     * @param sender Sender as bytes32
-     * @param messageBody ABI-encoded receiver address
-     * @return true on success
+     * @notice Extracts receiver EVM address from the CCTP bridge message
+     * @dev Receiver is encoded in the last 20 bytes of the bridge message payload
+     * @param bridgeMessage The full CCTP bridge message bytes
+     * @return receiver The extracted receiver address
      */
-    function _handleReceiveMessage(
-        uint32 sourceDomain,
-        bytes32 sender,
-        bytes calldata messageBody
-    ) internal returns (bool) {
-        uint256 chainFromId = _chainIdByDomainId[sourceDomain];
-
-        require(_domainsByChainId[chainFromId].isWhitelisted, NotWhitelistedDomain(sourceDomain));
-        require(_domainsByChainId[chainFromId].domainId == sourceDomain, DomainsNotMatch(chainFromId, sourceDomain));
-
-        address senderAddress = address(uint160(uint256(sender)));
-        address receiver = abi.decode(messageBody, (address));
-        address expectedPeer = peers[chainFromId];
-
-        require(senderAddress == expectedPeer, NotPeer(senderAddress, expectedPeer));
-
-        uint256 slot = TRANSIENT_STORAGE_SLOT_AMOUNT_CLAIMED;
-        uint256 amountClaimed;
+    function _extractReceiverFromBridgeMessage(
+        bytes calldata bridgeMessage
+    ) internal pure returns (address receiver) {
+        require(bridgeMessage.length == CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH, InvalidBridgeMessageLength(bridgeMessage.length));
+        uint256 offset = bridgeMessage.length - 20;
         assembly {
-            amountClaimed := tload(slot)
+            let data := calldataload(add(bridgeMessage.offset, offset))
+            receiver := shr(96, data)
         }
-        _finalizeBridge(receiver, usdc, amountClaimed);
-        return true;
     }
 }
