@@ -69,8 +69,10 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
         require(domainId > 0, IncorrectDomainId(domainId));
 
         Domain storage domain = _domainsByChainId[chainId];
+        require(domain.domainId == domainId, DomainsNotMatch(chainId, domainId));
         require(domain.isWhitelisted, Errors.AlreadyBlacklisted());
         domain.isWhitelisted = false;
+        _chainIdByDomainId[domainId] = 0;
         emit DomainBlacklisted(chainId, domainId);
     }
 
