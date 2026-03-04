@@ -53,7 +53,6 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
     /// @inheritdoc ICCTPv2BridgeAdapter
     function whitelistDomain(uint256 chainId, uint32 domainId) external onlyRole(GOVERNANCE_ROLE) {
         require(chainId > 0, IncorrectChainId(chainId));
-        require(domainId > 0, IncorrectDomainId(domainId));
 
         Domain storage domain = _domainsByChainId[chainId];
         require(!domain.isWhitelisted, Errors.AlreadyWhitelisted());
@@ -66,7 +65,6 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
     /// @inheritdoc ICCTPv2BridgeAdapter
     function blacklistDomain(uint256 chainId, uint32 domainId) external onlyRole(GOVERNANCE_ROLE) {
         require(chainId > 0, IncorrectChainId(chainId));
-        require(domainId > 0, IncorrectDomainId(domainId));
 
         Domain storage domain = _domainsByChainId[chainId];
         require(domain.domainId == domainId, DomainsNotMatch(chainId, domainId));
