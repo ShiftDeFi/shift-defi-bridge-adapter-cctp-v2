@@ -116,7 +116,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
             abi.encodePacked(receiver)
         );
 
-        return instruction.amount;
+        return instruction.amount - decodedPayload.maxFee;
     }
 
     function _validatePayload(

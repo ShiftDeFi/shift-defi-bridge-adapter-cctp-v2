@@ -205,12 +205,12 @@ contract CCTPv2BridgeAdapterTest is Test {
         );
     }
 
-    function test_Claim_HandleUnfinalizedMessage() public {
+    function test_Claim() public {
         uint256 amount = _randomBridgeAmount();
         uint256 maxFee = _randomMaxFee();
         uint256 minTokenAmount = amount - maxFee - 1;
         uint32 unfinalizedThreshold = uint32(
-            vm.randomUint(MIN_FINALITY_THRESHOLD, MAX_FINALITY_THRESHOLD - 1)
+            vm.randomUint(MIN_FINALITY_THRESHOLD, MAX_FINALITY_THRESHOLD)
         );
 
         vm.selectFork(l1ForkId);
@@ -236,16 +236,25 @@ contract CCTPv2BridgeAdapterTest is Test {
 
         bridgeMessage = _randomizeNonce(bridgeMessage);
         bridgeMessage = _insertFinalityThreshold(bridgeMessage, unfinalizedThreshold);
+        uint256 fee = vm.randomUint(0, maxFee);
+        bridgeMessage = _insertFee(bridgeMessage, fee);
 
         bytes memory bridgeAttestationPacked = _packAttestations(l2Attesters, keccak256(bridgeMessage));
 
         vm.selectFork(l2ForkId);
         l2Peer.claimCCTPBridge(bridgeMessage, bridgeAttestationPacked);
 
+        uint256 expectedClaimableAmount = amount - fee;
+
         assertEq(
             IERC20(l2Fork.usdc).balanceOf(address(l2Peer)),
-            amount,
-            "Adapter should hold claimed USDC amount when message is unfinalized"
+            expectedClaimableAmount,
+            "Adapter should hold claimed USDC amount"
+        );
+        assertEq(
+            l2Peer.claimableAmounts(receiver, l2Fork.usdc),
+            expectedClaimableAmount,
+            "Receiver should receive claimed USDC amount"
         );
     }
 
@@ -630,6 +639,15 @@ contract CCTPv2BridgeAdapterTest is Test {
         message[145] = bytes1(uint8(finalityThreshold >> 16));
         message[146] = bytes1(uint8(finalityThreshold >> 8));
         message[147] = bytes1(uint8(finalityThreshold));
+        return message;
+    }
+
+    function _insertFee(bytes memory message, uint256 fee) internal pure returns (bytes memory) {
+        require(message.length >= 344, "message too short");
+        if (fee == 0) return message;
+        for (uint256 i = 0; i < 32; i++) {
+            message[312 + i] = bytes1(uint8(fee >> (248 - i * 8)));
+        }
         return message;
     }
 }
