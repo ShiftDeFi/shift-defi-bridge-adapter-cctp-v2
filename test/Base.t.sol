@@ -159,16 +159,13 @@ abstract contract Base is Test {
                 CCTPv2BridgeAdapter.initialize.selector,
                 _roles.defaultAdmin,
                 _roles.governance,
+                _roles.claimer,
                 _fork.tokenMessengerV2,
                 _fork.usdc
             )
         );
 
         CCTPv2BridgeAdapter adapter = CCTPv2BridgeAdapter(address(proxy));
-        vm.startPrank(_roles.defaultAdmin);
-        adapter.grantRole(GOVERNANCE_ROLE, _roles.governance);
-        adapter.grantRole(CLAIMER_ROLE, _roles.claimer);
-        vm.stopPrank();
         return adapter;
     }
 

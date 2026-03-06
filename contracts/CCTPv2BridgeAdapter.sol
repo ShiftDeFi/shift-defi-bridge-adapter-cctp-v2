@@ -42,6 +42,7 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     function initialize(
         address _defaultAdmin,
         address _governance,
+        address _claimer,
         address _tokenMessengerV2,
         address _usdc
     ) external initializer {
@@ -51,6 +52,7 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
         usdc = _usdc;
         messageTransmitter = ITokenMessengerV2(_tokenMessengerV2).localMessageTransmitter();
         __BridgeAdapter_init(_defaultAdmin, _governance);
+        _grantRole(CLAIMER_ROLE, _claimer);
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
