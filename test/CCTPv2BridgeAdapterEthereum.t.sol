@@ -20,20 +20,18 @@ contract CCTPv2BridgeAdapterEthereumTest is CCTPv2BridgeAdapterTest {
         string memory ETHEREUM_RPC = vm.envString("ETH_RPC_URL");
         string memory ARBITRUM_RPC = vm.envString("ARB_RPC_URL");
 
-        Fork memory l1Fork = Fork({
+        _setUp(Fork({
             rpc: ETHEREUM_RPC,
             tokenMessengerV2: ETHEREUM_TOKEN_MESSENGER_V2,
             usdc: ETHEREUM_USDC,
             chainId: ETHEREUM_CHAIN_ID,
             domainId: ETHEREUM_DOMAIN_ID
-        });
-        Fork memory l2Fork = Fork({
+        }), Fork({
             rpc: ARBITRUM_RPC,
             tokenMessengerV2: ARBITRUM_TOKEN_MESSENGER_V2,
             usdc: ARBITRUM_USDC,
             chainId: ARBITRUM_CHAIN_ID,
             domainId: ARBITRUM_DOMAIN_ID
-        });
-        _setUp(l1Fork, l2Fork);
+        }));
     }
 }
