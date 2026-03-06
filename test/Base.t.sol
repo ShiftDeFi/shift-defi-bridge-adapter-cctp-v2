@@ -14,6 +14,7 @@ interface IMessageTransmitter {
     function attesterManager() external view returns (address);
     function enableAttester(address attester) external;
     function signatureThreshold() external view returns (uint256);
+    function receiveMessage(bytes memory message, bytes memory attestation) external returns (bool);
 }
 
 abstract contract Base is Test {

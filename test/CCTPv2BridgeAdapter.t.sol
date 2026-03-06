@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import {Base} from "./Base.t.sol";
+import {Base, IMessageTransmitter} from "./Base.t.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ICCTPv2BridgeAdapter} from "../contracts/interfaces/ICCTPv2BridgeAdapter.sol";
 import {IBridgeAdapter} from "@shift-defi/core/contracts/interfaces/IBridgeAdapter.sol";
@@ -377,21 +377,19 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         l1Peer.decodeCCTPV2Payload(hex"01");
     }
 
-    function test_ClaimCCTPBridge_RevertIf_InvalidAttestation() public {
+    function test_ClaimCCTPBridge_RevertIf_InvalidMessageReceive() public {
         vm.selectFork(l2ForkId);
-        bytes memory fakeMessage = new bytes(CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH);
-        bytes memory wrongAttestation = abi.encodePacked(bytes32(0));
+        bytes memory message = new bytes(CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH);
+        bytes memory attestation = _packAttestations(l2Attesters, keccak256(message));
 
-        vm.expectRevert();
-        l2Peer.claimCCTPBridge(fakeMessage, wrongAttestation);
-    }
+        vm.mockCall(
+            l2Peer.messageTransmitter(),
+            abi.encodeWithSelector(IMessageTransmitter.receiveMessage.selector, message, attestation),
+            abi.encode(false)
+        );
 
-    function test_ClaimCCTPBridge_RevertIf_InvalidBridgeMessageLength() public {
-        vm.selectFork(l2ForkId);
-        bytes memory shortMessage = new bytes(100);
-        bytes memory attestation = _packAttestations(l2Attesters, keccak256(shortMessage));
-
-        vm.expectRevert();
-        l2Peer.claimCCTPBridge(shortMessage, attestation);
+        vm.expectRevert(abi.encodeWithSelector(ICCTPv2BridgeAdapter.FailedMessageReceive.selector));
+        vm.prank(roles.claimer);
+        l2Peer.claimCCTPBridge(message, attestation);
     }
 }
