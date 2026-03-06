@@ -92,9 +92,6 @@ abstract contract Base is Test {
         l2Peer.setPeer(l1Fork.chainId, address(l1Peer));
         l2Peer.setSlippageCapPct(SLIPPAGE_CAP_PCT);
         vm.stopPrank();
-
-        baseL1SnapshotId = vm.snapshot();
-        baseL2SnapshotId = vm.snapshot();
     }
 
     function _randomBridgeAmount() internal view returns (uint256) {
