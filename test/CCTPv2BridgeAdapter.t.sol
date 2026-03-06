@@ -40,7 +40,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         assertEq(
             IERC20(l1Fork.usdc).balanceOf(roles.bridger),
             balanceBefore - amount,
-            "Bridger balance should decrease by bridged amount"
+            "test_Bridge: Bridger balance should decrease by bridged amount"
         );
     }
 
@@ -89,12 +89,12 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         assertEq(
             IERC20(l2Fork.usdc).balanceOf(address(l2Peer)),
             expectedClaimableAmount,
-            "Adapter should hold claimed USDC amount"
+            "test_Claim: Adapter should hold claimed USDC amount"
         );
         assertEq(
             l2Peer.claimableAmounts(receiver, l2Fork.usdc),
             expectedClaimableAmount,
-            "Receiver should receive claimed USDC amount"
+            "test_Claim: Receiver should receive claimed USDC amount"
         );
     }
 
@@ -109,7 +109,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         assertEq(
             l1Peer.getDomainId(newChainId),
             newDomainId,
-            "Domain ID should match whitelisted value"
+            "test_WhitelistDomain_Success: Domain ID should match whitelisted value"
         );
     }
 
@@ -326,7 +326,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         assertEq(
             IERC20(l1Fork.usdc).balanceOf(roles.bridger),
             0,
-            "Bridger balance should be zero after bridge"
+            "test_Bridge_FinalityThresholdBoundary_Min: Bridger balance should be zero after bridge"
         );
     }
 
@@ -355,7 +355,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         assertEq(
             IERC20(l1Fork.usdc).balanceOf(roles.bridger),
             0,
-            "Bridger balance should be zero after bridge"
+            "test_Bridge_FinalityThresholdBoundary_Max: Bridger balance should be zero after bridge"
         );
     }
 
@@ -367,8 +367,8 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         bytes memory encoded = l1Peer.encodeCCTPV2Payload(maxFee, bridgeMin);
         ICCTPv2BridgeAdapter.CCTPV2Payload memory decoded = l1Peer.decodeCCTPV2Payload(encoded);
 
-        assertEq(decoded.maxFee, maxFee, "maxFee should match");
-        assertEq(decoded.bridgeMinFinalityThreshold, bridgeMin, "bridgeMinFinalityThreshold should match");
+        assertEq(decoded.maxFee, maxFee, "test_EncodeDecodeCCTPV2Payload_Roundtrip: maxFee should match");
+        assertEq(decoded.bridgeMinFinalityThreshold, bridgeMin, "test_EncodeDecodeCCTPV2Payload_Roundtrip: bridgeMinFinalityThreshold should match");
     }
 
     function test_DecodeCCTPV2Payload_RevertIf_InvalidPayload() public {
