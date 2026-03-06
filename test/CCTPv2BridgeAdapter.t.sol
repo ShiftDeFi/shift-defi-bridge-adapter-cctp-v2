@@ -7,6 +7,8 @@ import {ICCTPv2BridgeAdapter} from "../contracts/interfaces/ICCTPv2BridgeAdapter
 import {IBridgeAdapter} from "@shift-defi/core/contracts/interfaces/IBridgeAdapter.sol";
 import {Errors} from "@shift-defi/core/contracts/libraries/helpers/Errors.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import {IAccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
 abstract contract CCTPv2BridgeAdapterTest is Base {
@@ -79,6 +81,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         bytes memory bridgeAttestationPacked = _packAttestations(l2Attesters, keccak256(bridgeMessage));
 
         vm.selectFork(l2ForkId);
+        vm.prank(roles.claimer);
         l2Peer.claimCCTPBridge(bridgeMessage, bridgeAttestationPacked);
 
         uint256 expectedClaimableAmount = amount - fee;
@@ -118,9 +121,10 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
     }
 
     function test_WhitelistDomain_RevertIf_NotGovernance() public {
+        address stranger = makeAddr("stranger");
         vm.selectFork(l1ForkId);
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert();
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, GOVERNANCE_ROLE));
         l1Peer.whitelistDomain(99_999, 99);
     }
 
@@ -172,9 +176,10 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
     }
 
     function test_BlacklistDomain_RevertIf_NotGovernance() public {
+        address stranger = makeAddr("stranger");
         vm.selectFork(l1ForkId);
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert();
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, GOVERNANCE_ROLE));
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
     }
 

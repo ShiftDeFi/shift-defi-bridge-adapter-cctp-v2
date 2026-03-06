@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {BridgeAdapter} from "@shift-defi/core/contracts/BridgeAdapter.sol";
 import {Errors} from "@shift-defi/core/contracts/libraries/helpers/Errors.sol";
 
@@ -11,8 +12,10 @@ import {ICCTPv2BridgeAdapter} from "./interfaces/ICCTPv2BridgeAdapter.sol";
 import {ITokenMessengerV2} from "./dependencies/interfaces/cctp-v2/ITokenMessengerV2.sol";
 import {IMessageTransmitter} from "./dependencies/interfaces/cctp-v2/IMessageTransmitter.sol";
 
-contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
+contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, BridgeAdapter {
     using SafeERC20 for IERC20;
+
+    bytes32 public constant CLAIMER_ROLE = keccak256("CLAIMER_ROLE");
 
     address public tokenMessengerV2;
     address public messageTransmitter;
@@ -140,7 +143,7 @@ contract CCTPv2BridgeAdapter is ICCTPv2BridgeAdapter, BridgeAdapter {
     function claimCCTPBridge(
         bytes calldata bridgeMessage,
         bytes calldata bridgeAttestation
-    ) external nonReentrant {
+    ) external nonReentrant onlyRole(CLAIMER_ROLE) {
         address usdcCached = usdc;
         uint256 amountBeforeClaim = IERC20(usdcCached).balanceOf(address(this));
         require(

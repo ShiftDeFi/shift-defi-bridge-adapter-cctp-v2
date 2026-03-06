@@ -27,15 +27,20 @@ abstract contract Base is Test {
         address defaultAdmin;
         address governance;
         address bridger;
+        address claimer;
     }
 
     Roles public roles = Roles({
         defaultAdmin: makeAddr("defaultAdmin"),
         governance: makeAddr("governance"),
-        bridger: makeAddr("bridger")
+        bridger: makeAddr("bridger"),
+        claimer: makeAddr("claimer")
     });
 
     address receiver = makeAddr("receiver");
+
+    bytes32 public constant CLAIMER_ROLE = keccak256("CLAIMER_ROLE");
+    bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
 
     uint256 public constant MIN_BRIDGE_AMOUNT = 1e6;
     uint256 public constant MAX_BRIDGE_AMOUNT = 100_000e6;
@@ -159,8 +164,10 @@ abstract contract Base is Test {
         );
 
         CCTPv2BridgeAdapter adapter = CCTPv2BridgeAdapter(address(proxy));
-        vm.prank(_roles.defaultAdmin);
-        adapter.grantRole(keccak256("GOVERNANCE_ROLE"), _roles.governance);
+        vm.startPrank(_roles.defaultAdmin);
+        adapter.grantRole(GOVERNANCE_ROLE, _roles.governance);
+        adapter.grantRole(CLAIMER_ROLE, _roles.claimer);
+        vm.stopPrank();
         return adapter;
     }
 
