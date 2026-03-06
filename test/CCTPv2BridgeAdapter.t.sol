@@ -9,7 +9,7 @@ import {Errors} from "@shift-defi/core/contracts/libraries/helpers/Errors.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
-contract CCTPv2BridgeAdapterTest is Base {
+abstract contract CCTPv2BridgeAdapterTest is Base {
     function test_Bridge() public {
         uint256 amount = _randomBridgeAmount();
         uint256 maxFee = _randomMaxFee();
