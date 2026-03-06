@@ -48,6 +48,7 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     ) external initializer {
         require(_tokenMessengerV2 != address(0), Errors.ZeroAddress());
         require(_usdc != address(0), Errors.ZeroAddress());
+        require(_claimer != address(0), Errors.ZeroAddress());
         tokenMessengerV2 = _tokenMessengerV2;
         usdc = _usdc;
         messageTransmitter = ITokenMessengerV2(_tokenMessengerV2).localMessageTransmitter();
