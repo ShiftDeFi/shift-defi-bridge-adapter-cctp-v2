@@ -26,22 +26,26 @@ abstract contract Base is Test {
 
     struct Roles {
         address defaultAdmin;
-        address governance;
+        address bridgeAdapterManager;
+        address cacheManager;
         address bridger;
         address claimer;
     }
 
-    Roles public roles = Roles({
-        defaultAdmin: makeAddr("defaultAdmin"),
-        governance: makeAddr("governance"),
-        bridger: makeAddr("bridger"),
-        claimer: makeAddr("claimer")
-    });
+    Roles public roles =
+        Roles({
+            defaultAdmin: makeAddr("defaultAdmin"),
+            bridgeAdapterManager: makeAddr("bridgeAdapterManager"),
+            cacheManager: makeAddr("cacheManager"),
+            bridger: makeAddr("bridger"),
+            claimer: makeAddr("claimer")
+        });
 
     address receiver = makeAddr("receiver");
 
+    bytes32 public constant BRIDGE_ADAPTER_MANAGER_ROLE = keccak256("BRIDGE_ADAPTER_MANAGER_ROLE");
+    bytes32 public constant CACHE_MANAGER_ROLE = keccak256("CACHE_MANAGER_ROLE");
     bytes32 public constant CLAIMER_ROLE = keccak256("CLAIMER_ROLE");
-    bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
 
     uint256 public constant MIN_BRIDGE_AMOUNT = 1e6;
     uint256 public constant MAX_BRIDGE_AMOUNT = 100_000e6;
@@ -49,7 +53,8 @@ abstract contract Base is Test {
     uint256 public constant MAX_MAX_FEE = 10e6;
     uint256 public constant MIN_FINALITY_THRESHOLD = 1000;
     uint256 public constant MAX_FINALITY_THRESHOLD = 2000;
-    uint256 public constant SLIPPAGE_CAP_PCT = 1000;
+    uint256 public constant BRIDGE_CACHE_MAX_SIZE = 8;
+    uint256 public constant SLIPPAGE_CAP_PCT = 1e17;
     uint256 public constant CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH = 396;
 
     uint256[] public l1Attesters;
@@ -81,22 +86,20 @@ abstract contract Base is Test {
 
         vm.selectFork(l1ForkId);
         l1Attesters = _setupAttesters(l1ForkId, l1Fork);
-        vm.startPrank(roles.governance);
+        vm.startPrank(roles.bridgeAdapterManager);
         l1Peer.whitelistBridger(roles.bridger);
         l1Peer.whitelistDomain(l2Fork.chainId, l2Fork.domainId);
         l1Peer.setPeer(l2Fork.chainId, address(l2Peer));
         l1Peer.setBridgePath(l1Fork.usdc, l2Fork.chainId, l2Fork.usdc);
-        l1Peer.setSlippageCapPct(SLIPPAGE_CAP_PCT);
         vm.stopPrank();
 
         vm.selectFork(l2ForkId);
         l2Attesters = _setupAttesters(l2ForkId, l2Fork);
-        vm.startPrank(roles.governance);
+        vm.startPrank(roles.bridgeAdapterManager);
         l2Peer.whitelistBridger(roles.bridger);
         l2Peer.whitelistDomain(l1Fork.chainId, l1Fork.domainId);
         l2Peer.setBridgePath(l2Fork.usdc, l1Fork.chainId, l2Fork.usdc);
         l2Peer.setPeer(l1Fork.chainId, address(l1Peer));
-        l2Peer.setSlippageCapPct(SLIPPAGE_CAP_PCT);
         vm.stopPrank();
     }
 
@@ -146,11 +149,7 @@ abstract contract Base is Test {
         return attestersPks;
     }
 
-    function _proxify(
-        uint256 forkId,
-        Roles memory _roles,
-        Fork memory _fork
-    ) internal returns (CCTPv2BridgeAdapter) {
+    function _proxify(uint256 forkId, Roles memory _roles, Fork memory _fork) internal returns (CCTPv2BridgeAdapter) {
         vm.selectFork(forkId);
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(new CCTPv2BridgeAdapter()),
@@ -158,14 +157,17 @@ abstract contract Base is Test {
             abi.encodeWithSelector(
                 CCTPv2BridgeAdapter.initialize.selector,
                 _roles.defaultAdmin,
-                _roles.governance,
+                _roles.bridgeAdapterManager,
+                _roles.cacheManager,
+                SLIPPAGE_CAP_PCT,
+                BRIDGE_CACHE_MAX_SIZE,
                 _roles.claimer,
                 _fork.tokenMessengerV2,
                 _fork.usdc
             )
         );
 
-        CCTPv2BridgeAdapter adapter = CCTPv2BridgeAdapter(address(proxy));
+        CCTPv2BridgeAdapter adapter = CCTPv2BridgeAdapter(payable(address(proxy)));
         return adapter;
     }
 
@@ -185,9 +187,7 @@ abstract contract Base is Test {
 
     function _randomizeNonce(bytes memory message) internal view returns (bytes memory) {
         require(message.length >= 20, "message too short");
-        uint64 randomNonce = uint64(
-            uint256(keccak256(abi.encode(block.timestamp, block.number, message, msg.sender)))
-        );
+        uint64 randomNonce = uint64(uint256(keccak256(abi.encode(block.timestamp, block.number, message, msg.sender))));
         for (uint256 i = 0; i < 8; i++) {
             message[12 + i] = bytes1(uint8(randomNonce >> (56 - i * 8)));
         }
@@ -209,7 +209,10 @@ abstract contract Base is Test {
         uint32 finalityThreshold
     ) internal pure returns (bytes memory) {
         require(message.length >= 148, "message too short");
-        require(finalityThreshold >= MIN_FINALITY_THRESHOLD && finalityThreshold <= MAX_FINALITY_THRESHOLD, "threshold out of range");
+        require(
+            finalityThreshold >= MIN_FINALITY_THRESHOLD && finalityThreshold <= MAX_FINALITY_THRESHOLD,
+            "threshold out of range"
+        );
         message[144] = bytes1(uint8(finalityThreshold >> 24));
         message[145] = bytes1(uint8(finalityThreshold >> 16));
         message[146] = bytes1(uint8(finalityThreshold >> 8));

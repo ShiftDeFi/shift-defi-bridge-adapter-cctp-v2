@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {BridgeAdapter} from "@shift-defi/core/contracts/BridgeAdapter.sol";
-import {Errors} from "@shift-defi/core/contracts/libraries/helpers/Errors.sol";
+import {Errors} from "@shift-defi/core/contracts/libraries/Errors.sol";
 
 import {ICCTPv2BridgeAdapter} from "./interfaces/ICCTPv2BridgeAdapter.sol";
 import {ITokenMessengerV2} from "./dependencies/interfaces/cctp-v2/ITokenMessengerV2.sol";
@@ -35,13 +35,19 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
      * @notice Initializes the CCTPv2BridgeAdapter contract
      * @dev Sets up the token messenger, message transmitter, and USDC addresses
      * @param _defaultAdmin The default admin address for access control
-     * @param _governance The governance address for access control
+     * @param _bridgeAdapterManager The bridge adapter manager address for access control
+     * @param _cacheManager The cache manager address for access control
+     * @param slippageCapPct The slippage cap percentage
+     * @param maxCacheSize The maximum cache size
      * @param _tokenMessengerV2 The address of the TokenMessengerV2 contract
      * @param _usdc The address of the USDC token contract
      */
     function initialize(
         address _defaultAdmin,
-        address _governance,
+        address _bridgeAdapterManager,
+        address _cacheManager,
+        uint256 slippageCapPct,
+        uint256 maxCacheSize,
         address _claimer,
         address _tokenMessengerV2,
         address _usdc
@@ -52,12 +58,12 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
         tokenMessengerV2 = _tokenMessengerV2;
         usdc = _usdc;
         messageTransmitter = ITokenMessengerV2(_tokenMessengerV2).localMessageTransmitter();
-        __BridgeAdapter_init(_defaultAdmin, _governance);
+        __BridgeAdapter_init(_defaultAdmin, _bridgeAdapterManager, _cacheManager, slippageCapPct, maxCacheSize);
         _grantRole(CLAIMER_ROLE, _claimer);
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
-    function whitelistDomain(uint256 chainId, uint32 domainId) external onlyRole(GOVERNANCE_ROLE) {
+    function whitelistDomain(uint256 chainId, uint32 domainId) external onlyRole(BRIDGE_ADAPTER_MANAGER_ROLE) {
         require(chainId > 0, IncorrectChainId(chainId));
 
         Domain storage domain = _domainsByChainId[chainId];
@@ -69,7 +75,7 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
-    function blacklistDomain(uint256 chainId, uint32 domainId) external onlyRole(GOVERNANCE_ROLE) {
+    function blacklistDomain(uint256 chainId, uint32 domainId) external onlyRole(BRIDGE_ADAPTER_MANAGER_ROLE) {
         require(chainId > 0, IncorrectChainId(chainId));
 
         Domain storage domain = _domainsByChainId[chainId];
@@ -168,10 +174,11 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
      * @param bridgeMessage The full CCTP bridge message bytes
      * @return receiver The extracted receiver address
      */
-    function _extractReceiverFromBridgeMessage(
-        bytes calldata bridgeMessage
-    ) internal pure returns (address receiver) {
-        require(bridgeMessage.length == CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH, InvalidBridgeMessageLength(bridgeMessage.length));
+    function _extractReceiverFromBridgeMessage(bytes calldata bridgeMessage) internal pure returns (address receiver) {
+        require(
+            bridgeMessage.length == CCTP_V2_BRIDGE_MESSAGE_WITH_PAYLOAD_LENGTH,
+            InvalidBridgeMessageLength(bridgeMessage.length)
+        );
         uint256 offset = bridgeMessage.length - 20;
         assembly {
             let data := calldataload(add(bridgeMessage.offset, offset))
