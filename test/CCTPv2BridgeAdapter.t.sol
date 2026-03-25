@@ -5,7 +5,7 @@ import {Base, IMessageTransmitter} from "./Base.t.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ICCTPv2BridgeAdapter} from "../contracts/interfaces/ICCTPv2BridgeAdapter.sol";
 import {IBridgeAdapter} from "@shift-defi/core/contracts/interfaces/IBridgeAdapter.sol";
-import {Errors} from "@shift-defi/core/contracts/libraries/helpers/Errors.sol";
+import {Errors} from "@shift-defi/core/contracts/libraries/Errors.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {IAccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
@@ -27,6 +27,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -48,9 +49,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         uint256 amount = _randomBridgeAmount();
         uint256 maxFee = _randomMaxFee();
         uint256 minTokenAmount = amount - maxFee - 1;
-        uint32 unfinalizedThreshold = uint32(
-            vm.randomUint(MIN_FINALITY_THRESHOLD, MAX_FINALITY_THRESHOLD)
-        );
+        uint32 unfinalizedThreshold = uint32(vm.randomUint(MIN_FINALITY_THRESHOLD, MAX_FINALITY_THRESHOLD));
 
         vm.selectFork(l1ForkId);
         deal(l1Fork.usdc, roles.bridger, amount);
@@ -60,6 +59,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -103,7 +103,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         uint256 newChainId = 99_999;
         uint32 newDomainId = 99;
 
-        vm.prank(roles.governance);
+        vm.prank(roles.bridgeAdapterManager);
         l1Peer.whitelistDomain(newChainId, newDomainId);
 
         assertEq(
@@ -115,22 +115,28 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
 
     function test_WhitelistDomain_RevertIf_AlreadyWhitelisted() public {
         vm.selectFork(l1ForkId);
-        vm.prank(roles.governance);
+        vm.prank(roles.bridgeAdapterManager);
         vm.expectRevert(Errors.AlreadyWhitelisted.selector);
         l1Peer.whitelistDomain(l2Fork.chainId, l2Fork.domainId);
     }
 
-    function test_WhitelistDomain_RevertIf_NotGovernance() public {
+    function test_WhitelistDomain_RevertIf_NotBridgeAdapterManager() public {
         address stranger = makeAddr("stranger");
         vm.selectFork(l1ForkId);
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, GOVERNANCE_ROLE));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                stranger,
+                BRIDGE_ADAPTER_MANAGER_ROLE
+            )
+        );
         l1Peer.whitelistDomain(99_999, 99);
     }
 
     function test_WhitelistDomain_RevertIf_ChainIdZero() public {
         vm.selectFork(l1ForkId);
-        vm.prank(roles.governance);
+        vm.prank(roles.bridgeAdapterManager);
         vm.expectRevert(abi.encodeWithSelector(ICCTPv2BridgeAdapter.IncorrectChainId.selector, 0));
         l1Peer.whitelistDomain(0, l2Fork.domainId);
     }
@@ -142,7 +148,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         uint256 minTokenAmount = amount - maxFee - 1;
         uint32 finality = _randomFinalityThreshold();
 
-        vm.prank(roles.governance);
+        vm.prank(roles.bridgeAdapterManager);
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
         deal(l1Fork.usdc, roles.bridger, amount);
 
@@ -150,11 +156,10 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
-        vm.expectRevert(
-            abi.encodeWithSelector(ICCTPv2BridgeAdapter.NotWhitelistedDomain.selector, l2Fork.chainId)
-        );
+        vm.expectRevert(abi.encodeWithSelector(ICCTPv2BridgeAdapter.NotWhitelistedDomain.selector, l2Fork.chainId));
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -168,24 +173,30 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
 
     function test_BlacklistDomain_RevertIf_AlreadyBlacklisted() public {
         vm.selectFork(l1ForkId);
-        vm.startPrank(roles.governance);
+        vm.startPrank(roles.bridgeAdapterManager);
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
         vm.expectRevert(Errors.AlreadyBlacklisted.selector);
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
         vm.stopPrank();
     }
 
-    function test_BlacklistDomain_RevertIf_NotGovernance() public {
+    function test_BlacklistDomain_RevertIf_NotBridgeAdapterManager() public {
         address stranger = makeAddr("stranger");
         vm.selectFork(l1ForkId);
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, GOVERNANCE_ROLE));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                stranger,
+                BRIDGE_ADAPTER_MANAGER_ROLE
+            )
+        );
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
     }
 
     function test_BlacklistDomain_RevertIf_ChainIdZero() public {
         vm.selectFork(l1ForkId);
-        vm.prank(roles.governance);
+        vm.prank(roles.bridgeAdapterManager);
         vm.expectRevert(abi.encodeWithSelector(ICCTPv2BridgeAdapter.IncorrectChainId.selector, 0));
         l1Peer.blacklistDomain(0, l2Fork.domainId);
     }
@@ -198,7 +209,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         MockERC20 otherToken = new MockERC20();
         otherToken.mint(roles.bridger, amount);
 
-        vm.startPrank(roles.governance);
+        vm.startPrank(roles.bridgeAdapterManager);
         l1Peer.setBridgePath(address(otherToken), l2Fork.chainId, l2Fork.usdc);
         vm.stopPrank();
 
@@ -209,6 +220,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         vm.expectRevert(ICCTPv2BridgeAdapter.NotUsdc.selector);
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: address(otherToken),
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -225,7 +237,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         uint256 amount = _randomBridgeAmount();
         uint256 maxFee = _randomMaxFee();
 
-        vm.prank(roles.governance);
+        vm.prank(roles.bridgeAdapterManager);
         l1Peer.blacklistDomain(l2Fork.chainId, l2Fork.domainId);
         deal(l1Fork.usdc, roles.bridger, amount);
 
@@ -233,11 +245,10 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
 
         vm.startPrank(roles.bridger);
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
-        vm.expectRevert(
-            abi.encodeWithSelector(ICCTPv2BridgeAdapter.NotWhitelistedDomain.selector, l2Fork.chainId)
-        );
+        vm.expectRevert(abi.encodeWithSelector(ICCTPv2BridgeAdapter.NotWhitelistedDomain.selector, l2Fork.chainId));
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -264,6 +275,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         );
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -290,6 +302,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         );
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -313,6 +326,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -342,6 +356,7 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         IERC20(l1Fork.usdc).approve(address(l1Peer), amount);
         l1Peer.bridge(
             IBridgeAdapter.BridgeInstruction({
+                value: 0,
                 token: l1Fork.usdc,
                 amount: amount,
                 chainTo: l2Fork.chainId,
@@ -368,7 +383,11 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         ICCTPv2BridgeAdapter.CCTPV2Payload memory decoded = l1Peer.decodeCCTPV2Payload(encoded);
 
         assertEq(decoded.maxFee, maxFee, "test_EncodeDecodeCCTPV2Payload_Roundtrip: maxFee should match");
-        assertEq(decoded.bridgeMinFinalityThreshold, bridgeMin, "test_EncodeDecodeCCTPV2Payload_Roundtrip: bridgeMinFinalityThreshold should match");
+        assertEq(
+            decoded.bridgeMinFinalityThreshold,
+            bridgeMin,
+            "test_EncodeDecodeCCTPV2Payload_Roundtrip: bridgeMinFinalityThreshold should match"
+        );
     }
 
     function test_DecodeCCTPV2Payload_RevertIf_InvalidPayload() public {
