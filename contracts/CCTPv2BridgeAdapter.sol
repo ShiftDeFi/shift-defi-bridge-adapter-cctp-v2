@@ -31,6 +31,10 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     mapping(uint256 => Domain) private _domainsByChainId;
     mapping(uint32 => uint256) private _chainIdByDomainId;
 
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * @notice Initializes the CCTPv2BridgeAdapter contract
      * @dev Sets up the token messenger, message transmitter, and USDC addresses
