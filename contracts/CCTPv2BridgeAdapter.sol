@@ -104,8 +104,9 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
-    function getDomainId(uint256 chainId) public view returns (uint32) {
-        return _domainsByChainId[chainId].domainId;
+    function getDomainId(uint256 chainId) public view returns (uint32, bool) {
+        Domain memory domain = _domainsByChainId[chainId];
+        return (domain.domainId, domain.isWhitelisted);
     }
 
     function _bridge(

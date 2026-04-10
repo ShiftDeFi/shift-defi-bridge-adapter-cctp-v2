@@ -95,15 +95,13 @@ interface ICCTPv2BridgeAdapter {
      * @param bridgeMessage The encoded bridge message containing token transfer and receiver information
      * @param bridgeAttestation The attestation for the bridge message
      */
-    function claimCCTPBridge(
-        bytes calldata bridgeMessage,
-        bytes calldata bridgeAttestation
-    ) external;
+    function claimCCTPBridge(bytes calldata bridgeMessage, bytes calldata bridgeAttestation) external;
 
     /**
      * @notice Returns the CCTP domain id for a given EVM chain id
      * @param chainId The EVM chain id
      * @return domainId The corresponding CCTP domain id
+     * @return isWhitelisted Whether the domain is whitelisted
      */
-    function getDomainId(uint256 chainId) external view returns (uint32 domainId);
+    function getDomainId(uint256 chainId) external view returns (uint32 domainId, bool isWhitelisted);
 }
