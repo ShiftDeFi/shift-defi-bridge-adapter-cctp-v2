@@ -31,6 +31,10 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     mapping(uint256 => Domain) private _domainsByChainId;
     mapping(uint32 => uint256) private _chainIdByDomainId;
 
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * @notice Initializes the CCTPv2BridgeAdapter contract
      * @dev Sets up the token messenger, message transmitter, and USDC addresses
@@ -100,8 +104,9 @@ contract CCTPv2BridgeAdapter is AccessControlUpgradeable, ICCTPv2BridgeAdapter, 
     }
 
     /// @inheritdoc ICCTPv2BridgeAdapter
-    function getDomainId(uint256 chainId) public view returns (uint32) {
-        return _domainsByChainId[chainId].domainId;
+    function getDomainId(uint256 chainId) public view returns (uint32, bool) {
+        Domain memory domain = _domainsByChainId[chainId];
+        return (domain.domainId, domain.isWhitelisted);
     }
 
     function _bridge(
