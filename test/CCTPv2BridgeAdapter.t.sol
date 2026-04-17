@@ -106,11 +106,10 @@ abstract contract CCTPv2BridgeAdapterTest is Base {
         vm.prank(roles.bridgeAdapterManager);
         l1Peer.whitelistDomain(newChainId, newDomainId);
 
-        assertEq(
-            l1Peer.getDomainId(newChainId),
-            newDomainId,
-            "test_WhitelistDomain_Success: Domain ID should match whitelisted value"
-        );
+        (uint32 domainId, bool isWhitelisted) = l1Peer.getDomainId(newChainId);
+
+        assertEq(domainId, newDomainId, "test_WhitelistDomain_Success: Domain ID should match whitelisted value");
+        assertEq(isWhitelisted, true, "test_WhitelistDomain_Success: Domain should be whitelisted");
     }
 
     function test_WhitelistDomain_RevertIf_AlreadyWhitelisted() public {
