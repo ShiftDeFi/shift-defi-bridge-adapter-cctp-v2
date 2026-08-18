@@ -3,12 +3,11 @@ pragma solidity ^0.8.28;
 
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-import {CCTPv2BridgeAdapter} from "../../contracts/CCTPv2BridgeAdapter.sol";
+import {CCTPv2BridgeAdapter} from "contracts/CCTPv2BridgeAdapter.sol";
 
 import {Script} from "forge-std/Script.sol";
 
 struct Roles {
-    address deployer;
     address proxyAdminOwner;
     address defaultAdmin;
     address bridgeAdapterManager;
@@ -30,7 +29,6 @@ contract DeployCCTPv2BridgeAdapterScript is Script {
     }
 
     function _readRolesFromEnv() internal {
-        roles.deployer = vm.envAddress("DEPLOYER");
         roles.proxyAdminOwner = vm.envAddress("PROXY_ADMIN_OWNER");
         roles.defaultAdmin = vm.envAddress("DEFAULT_ADMIN_ROLE");
         roles.bridgeAdapterManager = vm.envAddress("BRIDGE_ADAPTER_MANAGER_ROLE");
